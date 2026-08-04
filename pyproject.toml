@@ -1,0 +1,14 @@
+[project]
+name = "takeoff-api"
+version = "0.1.0"
+description = "Data extraction from Takeoff CRM for the migration"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+    "pydantic-settings>=2.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
