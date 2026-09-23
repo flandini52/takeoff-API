@@ -119,7 +119,7 @@ Su un domain controller, i diritti utente si assegnano tramite Group Policy (le 
 4. Apri **"Accedi come processo batch"**, aggiungi l'account di servizio (o il gruppo a cui appartiene).
 5. `gpupdate /force` sul domain controller, poi verifica con `whoami /priv` (da una sessione di quell'account) che `SeBatchLogonRight` sia presente.
 
-Non serve nessun altro diritto: l'account non deve essere amministratore, non deve poter fermare/avviare altri servizi, non deve avere accesso a nient'altro che questa cartella (vedi sezione 7). `deploy.ps1` riavvia Streamlit terminando il proprio processo (che possiede), non gestendo un'altra attività pianificata — non servono permessi speciali sulle attività stesse.
+Non serve nessun altro diritto: l'account non deve essere amministratore, non deve poter fermare/avviare altri servizi, non deve avere accesso a nient'altro che questa cartella (vedi sezione 7). `deploy.ps1` riavvia Streamlit terminando il proprio processo (che possiede): il supervisore `start_dashboard.ps1` lo rilancia dopo circa 5 secondi. Non gestisce un'altra attività pianificata, quindi non servono permessi speciali sulle attività stesse.
 
 ## 7. Permessi NTFS
 
@@ -142,12 +142,14 @@ Chiede la password dell'account (non viene mai salvata da questo script — la u
 
 | Nome | Cosa fa | Trigger |
 |---|---|---|
-| `LandiniDashboard` | Avvia Streamlit (`start_dashboard.ps1`) | All'avvio del server (ritardo 1 min); riavvio automatico ogni 1 min fino a 999 volte se termina; nessun limite di durata; una sola istanza |
-| `LandiniDashboard-Deploy` | Pull da `main` + riavvio se cambiato (`deploy.ps1`) | Ogni 3 minuti |
+| `LandiniDashboard` | Supervisore di Streamlit (`start_dashboard.ps1`): lo avvia e lo rilancia dopo ~5 s se termina | All'avvio del server (ritardo 1 min); nessun limite di durata; una sola istanza. RestartOnFailure solo come rete di sicurezza se l'attività non riesce a partire |
+| `LandiniDashboard-Deploy` | Pull da `main` + riavvio se cambiato (`deploy.ps1`) | Ogni 3 minuti e all'avvio del server (ritardo 3 min); durata massima 15 min per esecuzione |
 | `LandiniDashboard-ETL` | Estrazione dati da Takeoff CRM (`etl_nightly.ps1`) | Ogni notte alle 02:00 |
 | `LandiniDashboard-Backup` | Backup del database (`backup_db.ps1`) | Ogni notte alle 02:30 |
 
 Rilanciare lo script su attività già esistenti le aggiorna (idempotente), non le duplica.
+
+> **Perché un supervisore e non solo "Se l'attività non riesce, riavvia".** Quell'opzione dell'Utilità di pianificazione scatta solo se l'attività *non riesce a partire*, non quando il programma parte e poi termina con un errore. Per questo è `start_dashboard.ps1` a rilanciare Streamlit (dopo un crash o dopo un deploy). Se Streamlit esce più di 5 volte in 2 minuti, il supervisore aspetta 60 secondi prima di riprovare e lo scrive in `logs\dashboard-<data>.log`.
 
 Avvia subito `LandiniDashboard` senza aspettare un riavvio del server:
 
@@ -182,7 +184,7 @@ git log --oneline -10          # scegli il commit a cui tornare
 git reset --hard <hash-commit>
 uv sync --frozen
 Get-Process | Where-Object { ($_.Name -eq "python" -or $_.Name -eq "streamlit") -and $_.Path -like "C:\landini-dashboard*" } | Stop-Process -Force
-# LandiniDashboard si riavvia da solo entro ~1 minuto (RestartOnFailure)
+# Il supervisore (attività LandiniDashboard) rilancia Streamlit entro ~5 secondi
 ```
 
 Per tornare indietro anche sul database, vedi il backup più recente in `BACKUP_DIR` (o nel fallback `logs\backups\`):

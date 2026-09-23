@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Si autentica come etl_writer (ha SELECT su tutte le tabelle
-    applicative — vedi database/init/*.sql): non serve la password
+    applicative - vedi database/init/*.sql): non serve la password
     dell'utente admin 'postgres' solo per un backup logico, quindi questo
     script gira senza interazione.
 

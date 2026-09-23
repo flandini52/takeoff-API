@@ -34,7 +34,7 @@ function Assert-LocalDashboardDb {
     # database: questo progetto gira sullo stesso server di altri database
     # CRITICI (SILOG su 5432, TeamPortal su 5433/5434, pgbouncer TeamPortal
     # su 5434) che non vanno MAI toccati. Si ferma se .env non punta
-    # esplicitamente a localhost:5435 — la porta della sola istanza
+    # esplicitamente a localhost:5435 - la porta della sola istanza
     # Postgres 16 dedicata a questa dashboard.
     param([Parameter(Mandatory)] [hashtable]$EnvValues)
     $dbHost = $EnvValues["DB_HOST"]
@@ -85,7 +85,7 @@ function Get-BackupDir {
 
 function Get-PostgresBinPath {
     # Percorso di un eseguibile della cartella bin di PostgreSQL 16 (unica
-    # versione usata da questa dashboard sul server — non confondere con
+    # versione usata da questa dashboard sul server - non confondere con
     # l'installazione 9.4 usata da SILOG).
     param([Parameter(Mandatory)] [string]$Name)
     $path = "C:\Program Files\PostgreSQL\16\bin\$Name"

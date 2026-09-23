@@ -10,7 +10,7 @@
     dell'utente postgres a runtime, non la salva mai. Le password dei ruoli
     applicativi (etl_writer, dashboard_reader) vengono lette da .env.
 
-    Si ferma subito se .env non punta a localhost:5435 — vedi
+    Si ferma subito se .env non punta a localhost:5435 - vedi
     Assert-LocalDashboardDb in _lib.ps1: questo server ha altri database
     CRITICI (SILOG su 5432, TeamPortal su 5433/5434) che non vanno mai
     toccati.
@@ -70,7 +70,7 @@ try {
     }
 
     # 2. Esegue in ordine gli script di database/init/ (gli stessi usati
-    #    dall'init del container Docker, nessuna copia) — sono idempotenti:
+    #    dall'init del container Docker, nessuna copia) - sono idempotenti:
     #    ruoli con \if/\gset, tabelle/indici con IF NOT EXISTS, grant
     #    naturalmente idempotenti.
     foreach ($file in $sqlFiles) {
