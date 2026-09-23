@@ -27,7 +27,7 @@ Utenti aziendali
 
 Chiamate API dirette da Streamlit per dati real-time potranno essere introdotte in futuro, solo dove necessario — non sono presenti in questa prima fase.
 
-**Fase attuale**: solo infrastruttura. Nessuno schema di business (clienti, commesse, attività, tecnici, fatture, ...) e nessuna pagina/grafico di business — solo una pagina che verifica che Streamlit riesca a connettersi a PostgreSQL. Il client API del gestionale (`etl/app/api/client.py`) usa dati mock chiaramente etichettati come tali, in attesa della documentazione dell'API reale.
+**Stato**: l'ETL (`etl/app/`) è reale — usa `TakeoffClient` per estrarre le stesse due entità delle vecchie pipeline SQLite standalone (`activities`, `deadlines`) e le carica in PostgreSQL con upsert idempotenti. Streamlit (`streamlit/app/`) per ora ha solo la pagina di verifica infrastruttura: le pagine business (Manutenzioni, Scadenze dipendenti) e lo schema `raw_*`/business più ampio arrivano nelle fasi successive della migrazione (vedi il resto di questo README man mano che vengono aggiunte le sezioni).
 
 ## Struttura delle cartelle
 
@@ -50,12 +50,17 @@ etl/
 ├── Dockerfile
 ├── requirements.txt
 └── app/
-    ├── main.py           # entry point, esegue extract → transform → load
+    ├── main.py           # CLI (python -m app.main ...) + run(entity, **params) importabile
+    ├── config.py          # credenziali Takeoff CRM (pydantic-settings)
     ├── api/
-    │   └── client.py      # unico punto di contatto con il gestionale
+    │   └── client.py      # TakeoffClient — unico punto di contatto con il gestionale
+    ├── extract/
+    │   ├── activities.py  # manutenzioni pianificate
+    │   └── deadlines.py   # scadenze/certificati dipendenti (Wiki)
     ├── transform/         # trasformazioni dati (vuota per ora)
-    └── load/
-        └── postgres.py    # scrittura in PostgreSQL
+    ├── load/
+    │   └── postgres.py    # upsert per tabella, lock per entity, log in etl_runs
+    └── tools/              # CLI di esplorazione (extract_data.py, extract_wiki.py)
 ```
 
 Il repo contiene anche un toolkit di estrazione dati standalone precedente a questa architettura — vedi [Toolkit di estrazione dati (standalone)](#toolkit-di-estrazione-dati-standalone) più sotto.
@@ -79,8 +84,8 @@ DB_NAME
 DB_USER
 DB_PASSWORD
 
-GESTIONALE_API_URL
-GESTIONALE_API_KEY
+TAKEOFF_BASE_URL
+TAKEOFF_API_KEY / TAKEOFF_TOKEN   (set one of the two)
 ```
 
 `DB_HOST` viene sovrascritto a `postgres` da `docker-compose.yml` per i container streamlit/etl (nome del servizio sulla rete Docker) — cambialo solo se esegui quelle app fuori da Docker. `.env` non va mai committato (è in `.gitignore`); nessuna credenziale va scritta nel codice.
@@ -114,10 +119,19 @@ oppure, da un client esterno, connettersi a `localhost:${DB_PORT}` (default `543
 ## Eseguire l'ETL
 
 ```bash
-docker compose run --rm etl
+docker compose run --rm etl python -m app.main activities --month 2026-09
+docker compose run --rm etl python -m app.main deadlines "LANDINI SRL"
+docker compose run --rm etl python -m app.main all
 ```
 
-Esegue `etl/app/main.py`: estrae dati mock dal client del gestionale (`api/client.py`), e verifica che l'ETL possa connettersi a PostgreSQL (`load/postgres.py`). Logga ogni step; errori loggati con stack trace. Nessuna tabella di destinazione esiste ancora — verrà aggiunta insieme al primo caricamento reale, quando l'API del gestionale sarà documentata.
+Ogni run: estrae da Takeoff CRM (`api/client.py` + `extract/`), fa upsert idempotente in PostgreSQL (`load/postgres.py`, `INSERT ... ON CONFLICT DO UPDATE` sulle stesse chiavi usate in passato da `INSERT OR REPLACE`), e registra inizio/fine/righe caricate/eventuale errore in `etl_runs` (sostituisce il vecchio `_manifest.json`). Un lock Postgres per entity (`pg_try_advisory_lock`) evita run concorrenti sulla stessa entity: se una è già in corso, la seconda esce subito con un messaggio chiaro invece di lanciarsi in parallelo.
+
+Tool di esplorazione generici (non parte delle pipeline activities/deadlines):
+
+```bash
+docker compose run --rm etl python -m app.tools.extract_data contacts --format csv
+docker compose run --rm etl python -m app.tools.extract_wiki "Landini Srl" --exact
+```
 
 ---
 
