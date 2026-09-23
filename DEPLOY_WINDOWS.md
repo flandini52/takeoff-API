@@ -89,10 +89,11 @@ cd C:\landini-dashboard
 
 Chiede la password dell'utente `postgres` (non viene mai salvata), poi crea il database `landini_dashboard` e i ruoli `etl_writer`/`dashboard_reader` eseguendo in ordine gli script di `database\init\`. Lo script si ferma subito se `.env` non punta a `localhost:5435` — è una misura di sicurezza esplicita per non rischiare mai di toccare gli altri database del server. È idempotente: rilanciarlo su un database già inizializzato non cancella nulla.
 
-Poi installa le dipendenze Python:
+Poi installa le dipendenze Python, **copiando** i file (non con collegamenti alla cache di uv, che manterrebbero i permessi del profilo di chi lancia il comando e l'account di servizio non potrebbe leggerli):
 
 ```powershell
-uv sync --frozen
+$env:UV_LINK_MODE = "copy"
+uv sync --frozen --python "C:\Program Files\Python313\python.exe"
 ```
 
 ## 5. Firewall
@@ -197,6 +198,7 @@ Se qualcosa non va e il rollback automatico di `deploy.ps1` non basta (es. serve
 cd C:\landini-dashboard
 git log --oneline -10          # scegli il commit a cui tornare
 git reset --hard <hash-commit>
+$env:UV_LINK_MODE = "copy"
 uv sync --frozen
 Get-Process | Where-Object { ($_.Name -eq "python" -or $_.Name -eq "streamlit") -and $_.Path -like "C:\landini-dashboard*" } | Stop-Process -Force
 # Il supervisore (attività LandiniDashboard) rilancia Streamlit entro ~5 secondi

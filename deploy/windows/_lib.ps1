@@ -114,6 +114,12 @@ function Invoke-NativeLogged {
         [Parameter(Mandatory)] [string]$LogFile
     )
     $env:PYTHONUTF8 = "1"
+    # UV_LINK_MODE=copy: uv copia i file delle librerie in .venv invece di
+    # creare hardlink alla propria cache. Con gli hardlink i file mantengono
+    # i permessi della cache dell'utente che ha eseguito uv sync (es. il
+    # profilo di Administrator) e l'account di servizio non riesce a
+    # leggerli (PermissionError all'avvio di Streamlit).
+    $env:UV_LINK_MODE = "copy"
     # | Out-Null: la funzione deve restituire SOLO l'exit code, anche se per
     # qualche motivo arrivasse output sulla pipeline.
     & cmd.exe /d /c "$CommandLine >> `"$LogFile`" 2>&1" | Out-Null

@@ -53,6 +53,23 @@ finally {
     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 }
 
+# Verifica la password PRIMA di registrare: se e' sbagliata
+# Register-ScheduledTask fallisce su ogni attivita' e il messaggio finale
+# potrebbe trarre in inganno.
+Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+$accountName = ($ServiceAccount -split '\\')[-1]
+$context = New-Object System.DirectoryServices.AccountManagement.PrincipalContext(
+    [System.DirectoryServices.AccountManagement.ContextType]::Domain)
+try {
+    if (-not $context.ValidateCredentials($accountName, $password)) {
+        throw "Password errata per $ServiceAccount. Nessuna attivita' registrata."
+    }
+}
+finally {
+    $context.Dispose()
+}
+Write-Host "Password di $ServiceAccount verificata." -ForegroundColor Green
+
 function New-DashboardTaskAction {
     param([Parameter(Mandatory)] [string]$ScriptName)
     $scriptPath = Join-Path $DeployDir $ScriptName
@@ -76,7 +93,7 @@ try {
         -DontStopIfGoingOnBatteries
     $settings.ExecutionTimeLimit = "PT0S"   # "Arresta se in esecuzione per piu' di": disattivato
     Register-ScheduledTask -TaskName "LandiniDashboard" -Action $action -Trigger $trigger `
-        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force | Out-Null
+        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force -ErrorAction Stop | Out-Null
 
     # --- LandiniDashboard-Deploy: ogni giorno alle 06:30 ---------------------
     Write-Host "Registro LandiniDashboard-Deploy..."
@@ -95,7 +112,7 @@ try {
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
     $settings.ExecutionTimeLimit = "PT15M"   # un deploy bloccato non resta appeso per sempre
     Register-ScheduledTask -TaskName "LandiniDashboard-Deploy" -Action $action -Trigger $trigger `
-        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force | Out-Null
+        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force -ErrorAction Stop | Out-Null
 
     # --- LandiniDashboard-ETL: ogni notte alle 02:00 -------------------------
     Write-Host "Registro LandiniDashboard-ETL..."
@@ -103,7 +120,7 @@ try {
     $trigger = New-ScheduledTaskTrigger -Daily -At "02:00"
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName "LandiniDashboard-ETL" -Action $action -Trigger $trigger `
-        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force | Out-Null
+        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force -ErrorAction Stop | Out-Null
 
     # --- LandiniDashboard-Backup: ogni notte alle 02:30 ----------------------
     Write-Host "Registro LandiniDashboard-Backup..."
@@ -111,7 +128,7 @@ try {
     $trigger = New-ScheduledTaskTrigger -Daily -At "02:30"
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName "LandiniDashboard-Backup" -Action $action -Trigger $trigger `
-        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force | Out-Null
+        -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force -ErrorAction Stop | Out-Null
 
     Write-Host "== 4 attivita' pianificate registrate/aggiornate ==" -ForegroundColor Green
     Write-Host "Verifica con: Get-ScheduledTask -TaskName 'LandiniDashboard*'"

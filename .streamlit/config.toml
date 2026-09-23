@@ -1,0 +1,8 @@
+# Configurazione Streamlit condivisa da sviluppo, Docker e server Windows
+# (Streamlit la legge da .streamlit/config.toml nella cartella di lavoro,
+# cioe' la root del repo).
+
+[browser]
+# Tool interno con dati aziendali: niente statistiche di utilizzo inviate
+# ai server di Streamlit.
+gatherUsageStats = false
