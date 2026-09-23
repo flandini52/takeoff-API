@@ -5,6 +5,14 @@ __pycache__/
 *.jsonl
 *.csv
 
+# Repo is PUBLIC: none of this ever gets committed, regardless of where it
+# ends up (local dev, deploy/windows/ scripts, a stray download).
+*.db
+*.pdf
+data/
+logs/
+backups/
+
 # employee_deadlines_certificates pipeline: contains real personal data
 # (employee names, documents, expiry dates) — never commit it.
 employee_deadlines_certificates/data/

@@ -7,3 +7,4 @@ services:
   streamlit:
     volumes:
       - ./streamlit/app:/app/streamlit/app
+      - ./src:/app/src

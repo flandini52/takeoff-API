@@ -29,6 +29,12 @@ _ENV_FILE = _REPO_ROOT / ".env"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
+    # Environment: doesn't change how anything connects, only what's shown.
+    # ENABLE_SCADENZE gates the "Scadenze dipendenti" page (streamlit/app/
+    # main.py) — off by default until there's a login (V2).
+    dashboard_env: str = "development"
+    enable_scadenze: bool = False
+
     # Takeoff CRM
     takeoff_base_url: str = "https://webapi.takeoffcrm.com"
     takeoff_api_key: Optional[str] = None
