@@ -166,9 +166,13 @@ else:
     st.caption(f"{len(selected_rows)} selezionati su {len(downloadable)}")
 
     if st.button("⬇️ Prepara ZIP", disabled=not selected_rows):
-        element_ids = downloadable.iloc[selected_rows]["element_id"].tolist()
-        with st.spinner(f"Download di {len(element_ids)} documento/i da Takeoff CRM..."):
-            zip_bytes, missing = download_documents_zip(element_ids)
+        selected = downloadable.iloc[selected_rows]
+        items = [
+            (row["element_id"], f"{row['subject_name']}_{row['element_name']}")
+            for _, row in selected.iterrows()
+        ]
+        with st.spinner(f"Download di {len(items)} documento/i da Takeoff CRM..."):
+            zip_bytes, missing = download_documents_zip(items)
         if missing:
             st.warning(f"{len(missing)} documento/i non trovati o non scaricabili (element_id: {', '.join(missing)}).")
         st.download_button(
