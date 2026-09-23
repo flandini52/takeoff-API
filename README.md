@@ -25,7 +25,7 @@ Utenti aziendali
 - **PostgreSQL**: livello intermedio persistente tra gestionale e dashboard. Nessuno schema di business definitivo ancora — verrà aggiunto quando l'API del gestionale sarà documentata.
 - **Streamlit**: legge solo da PostgreSQL, tramite `streamlit/app/services/database.py` (connesso come `dashboard_reader`, sola lettura). Nessuna chiamata diretta al gestionale per pagina/utente (per ora — vedi sotto). Il bottone "🔄 Aggiorna dati" in sidebar è l'unica eccezione: chiama `etl.main.run()` **in-process** (non uno shell-out), incluso nell'immagine Streamlit apposta (vedi `streamlit/Dockerfile`).
 
-Chiamate API dirette da Streamlit per dati real-time potranno essere introdotte in futuro, solo dove necessario — non sono presenti in questa prima fase.
+Chiamate API dirette da Streamlit per dati real-time sono introdotte solo dove necessario. Prima eccezione: il download dei certificati PDF nella pagina Scadenze dipendenti (`services/documents.py`) — l'URL del file su Takeoff (Azure Blob SAS) scade dopo ~24h, quindi non può essere estratto una volta dall'ETL e salvato in Postgres; va richiesto in tempo reale al momento del download (`GET /api/wiki/{elementId}`), poi il file viene scaricato e zippato al volo.
 
 **Stato**: migrazione completa per le due entità esistenti. `etl/app/` estrae `activities` e `deadlines` da Takeoff CRM e le carica in PostgreSQL con upsert idempotenti. `streamlit/app/` ha tre pagine (`st.navigation`): Home (stato infrastruttura + storico `etl_runs`), Manutenzioni e Scadenze dipendenti (porting 1:1 delle vecchie dashboard SQLite). Nessuno schema di business oltre a queste due entità (clienti, commesse, tecnici, fatture, ...) — verrà aggiunto quando servirà, seguendo lo stesso pattern (`extract/` → tabella SQL → `load/` → pagina).
 
@@ -58,7 +58,8 @@ streamlit/
     │   └── sidebar.py          # bottone "Aggiorna dati" + "ultimo aggiornamento"
     ├── services/
     │   ├── database.py     # unico punto di accesso a PostgreSQL (letture, dashboard_reader)
-    │   └── etl.py            # bridge a etl.main.run(), chiamato dal bottone "Aggiorna dati"
+    │   ├── etl.py            # bridge a etl.main.run(), chiamato dal bottone "Aggiorna dati"
+    │   └── documents.py       # download PDF live da Takeoff CRM (unica eccezione "real-time")
     └── utils/
         ├── status.py        # stato Manutenzioni/Scadenze (dipende da "oggi")
         └── access.py          # require_access() — seam per l'autenticazione futura
@@ -145,7 +146,7 @@ Apri [http://localhost:8501](http://localhost:8501). Tre pagine in sidebar:
 
 - **Home**: stato della connessione a PostgreSQL, numero di tabelle nello schema `public`, storico degli ultimi run ETL (`etl_runs`).
 - **Manutenzioni**: KPI, % completamento per operaio, dettaglio mancanti, mappa — dati da `activities`.
-- **Scadenze dipendenti**: KPI, distribuzione per stato, dettaglio per persona — dati da `subjects`/`deadlines_certificates`.
+- **Scadenze dipendenti**: KPI, distribuzione per stato, dettaglio per persona — dati da `subjects`/`deadlines_certificates`. Include "Download certificati": tabella filtrabile per persona/tipologia con selezione multi-riga, bottone che scarica dal vivo i PDF da Takeoff CRM e li impacchetta in un unico ZIP.
 
 Entrambe le pagine business hanno, in sidebar, un pannello "🔄 Aggiorna dati da Takeoff CRM" con gli stessi input di prima (mese/tipi per Manutenzioni, ragione sociale/corrispondenza esatta per Scadenze) e la data dell'ultimo aggiornamento riuscito. Il bottone esegue l'ETL in-process (non uno shell-out): se un run per la stessa entity è già in corso, mostra "Aggiornamento già in corso" invece di lanciarne uno secondo.
 

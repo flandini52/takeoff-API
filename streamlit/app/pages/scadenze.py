@@ -15,6 +15,7 @@ from components.charts import horizontal_bar_chart
 from components.kpi import render_kpi_row
 from components.sidebar import render_last_update, render_refresh_button
 from services import database as db
+from services.documents import download_documents_zip
 from utils.access import require_access
 from utils.status import DEADLINE_STATUS_COLOR, DEADLINE_STATUS_ICON, DEADLINE_STATUS_ORDER, compute_deadline_status
 
@@ -114,6 +115,68 @@ with col_next:
         )
     )
     st.dataframe(upcoming, hide_index=True, width="stretch", height=280)
+
+st.divider()
+
+# --- Download certificati ---------------------------------------------------
+# L'unica parte di questa pagina che chiama il gestionale in tempo reale
+# (vedi services/documents.py): l'URL del file scade dopo ~24h, quindi va
+# richiesto al momento del download, non può essere salvato dall'ETL.
+
+st.subheader("Download certificati")
+
+col_f1, col_f2 = st.columns(2)
+with col_f1:
+    dl_person_filter = st.multiselect(
+        "Persona", sorted(filtered["subject_name"].dropna().unique().tolist()), default=[], key="dl_person"
+    )
+with col_f2:
+    dl_category_filter = st.multiselect(
+        "Tipologia certificato", sorted(filtered["element_category"].dropna().unique().tolist()), default=[], key="dl_category"
+    )
+
+downloadable = filtered[filtered["document_filename"].notna()].copy()
+if dl_person_filter:
+    downloadable = downloadable[downloadable["subject_name"].isin(dl_person_filter)]
+if dl_category_filter:
+    downloadable = downloadable[downloadable["element_category"].isin(dl_category_filter)]
+
+if downloadable.empty:
+    st.info("Nessun certificato con documento allegato per i filtri selezionati.")
+else:
+    download_table = downloadable[["subject_name", "element_name", "element_category", "expiry_date", "status_label", "document_filename"]].rename(
+        columns={
+            "subject_name": "Persona",
+            "element_name": "Certificato",
+            "element_category": "Tipologia",
+            "expiry_date": "Scadenza",
+            "status_label": "Stato",
+            "document_filename": "Documento",
+        }
+    )
+    selection = st.dataframe(
+        download_table,
+        hide_index=True,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="multi-row",
+        key="dl_table",
+    )
+    selected_rows = selection.selection.rows
+    st.caption(f"{len(selected_rows)} selezionati su {len(downloadable)}")
+
+    if st.button("⬇️ Prepara ZIP", disabled=not selected_rows):
+        element_ids = downloadable.iloc[selected_rows]["element_id"].tolist()
+        with st.spinner(f"Download di {len(element_ids)} documento/i da Takeoff CRM..."):
+            zip_bytes, missing = download_documents_zip(element_ids)
+        if missing:
+            st.warning(f"{len(missing)} documento/i non trovati o non scaricabili (element_id: {', '.join(missing)}).")
+        st.download_button(
+            "Salva ZIP",
+            data=zip_bytes,
+            file_name="certificati.zip",
+            mime="application/zip",
+        )
 
 st.divider()
 
