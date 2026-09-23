@@ -3,6 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: landini-postgres
     restart: unless-stopped
+    # env_file (not just `environment` below) so the init scripts under
+    # database/init/ can read ETL_WRITER_PASSWORD/DASHBOARD_READER_PASSWORD
+    # via psql's \getenv (see 001_roles.sql).
+    env_file: .env
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}

@@ -35,7 +35,11 @@ Chiamate API dirette da Streamlit per dati real-time potranno essere introdotte 
 docker-compose.yml       # postgres + streamlit + etl
 .env / .env.example
 database/
-└── init/                # script eseguiti da Postgres al primo avvio
+└── init/                    # script eseguiti da Postgres al primo avvio sul volume
+    ├── 001_roles.sql          # ruoli etl_writer / dashboard_reader
+    ├── 002_activities.sql     # tabella activities
+    ├── 003_deadlines.sql      # tabelle subjects / deadlines_certificates
+    └── 004_etl_runs.sql       # tabella etl_runs (log dei run ETL)
 streamlit/
 ├── Dockerfile
 ├── requirements.txt
@@ -81,14 +85,33 @@ Variabili principali (vedi `.env.example` per l'elenco completo):
 DB_HOST
 DB_PORT
 DB_NAME
-DB_USER
-DB_PASSWORD
+DB_USER / DB_PASSWORD                         (admin/bootstrap — nessun servizio applicativo lo usa)
+ETL_WRITER_PASSWORD                            (ruolo etl_writer, letto da etl/app)
+DASHBOARD_READER_PASSWORD                       (ruolo dashboard_reader, letto da streamlit/app)
 
 TAKEOFF_BASE_URL
 TAKEOFF_API_KEY / TAKEOFF_TOKEN   (set one of the two)
 ```
 
 `DB_HOST` viene sovrascritto a `postgres` da `docker-compose.yml` per i container streamlit/etl (nome del servizio sulla rete Docker) — cambialo solo se esegui quelle app fuori da Docker. `.env` non va mai committato (è in `.gitignore`); nessuna credenziale va scritta nel codice.
+
+### Ruoli PostgreSQL
+
+`database/init/001_roles.sql` crea due ruoli, uno per consumatore:
+
+- `etl_writer` — lettura/scrittura, usato dall'ETL (`SELECT`/`INSERT`/`UPDATE` sulle tabelle, mai `DELETE`)
+- `dashboard_reader` — sola lettura, usato da Streamlit
+
+Nessuno dei due servizi si connette come utente admin (`DB_USER`). Le password vengono lette dall'ambiente dallo script di init tramite `\getenv` — non sono mai scritte nello script.
+
+### Ricreare il database in sviluppo
+
+Gli script in `database/init/` vengono eseguiti da Postgres **solo al primo avvio di un volume vuoto** — modificarli non ha effetto su un volume già inizializzato. Per applicarli di nuovo in sviluppo:
+
+```bash
+docker compose down -v   # rimuove anche il volume postgres_data: i dati vengono persi
+docker compose up -d --build
+```
 
 ## Avviare Docker Compose
 
@@ -111,7 +134,8 @@ Apri [http://localhost:8501](http://localhost:8501). La pagina iniziale mostra: 
 ## Verificare PostgreSQL
 
 ```bash
-docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "SELECT version();"
+docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\dt"    # tabelle create dagli script di init
+docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\du"    # ruoli (landini, etl_writer, dashboard_reader)
 ```
 
 oppure, da un client esterno, connettersi a `localhost:${DB_PORT}` (default `5432`) con le credenziali in `.env`.
