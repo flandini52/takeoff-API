@@ -23,7 +23,12 @@ services:
       retries: 10
 
   streamlit:
-    build: ./streamlit
+    # Root build context: this image embeds the etl package too, so the
+    # "Aggiorna dati" button can import and call it in-process (see
+    # streamlit/Dockerfile).
+    build:
+      context: .
+      dockerfile: streamlit/Dockerfile
     container_name: landini-streamlit
     restart: unless-stopped
     env_file: .env

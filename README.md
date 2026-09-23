@@ -23,11 +23,13 @@ Utenti aziendali
 
 - **ETL**: unico componente che parla con l'API del gestionale. Estrae, trasforma e carica i dati in PostgreSQL. Eseguibile indipendentemente dalla dashboard (`docker compose run --rm etl`).
 - **PostgreSQL**: livello intermedio persistente tra gestionale e dashboard. Nessuno schema di business definitivo ancora — verrà aggiunto quando l'API del gestionale sarà documentata.
-- **Streamlit**: legge solo da PostgreSQL, tramite `streamlit/app/services/database.py`. Nessuna chiamata diretta al gestionale per pagina/utente (per ora — vedi sotto).
+- **Streamlit**: legge solo da PostgreSQL, tramite `streamlit/app/services/database.py` (connesso come `dashboard_reader`, sola lettura). Nessuna chiamata diretta al gestionale per pagina/utente (per ora — vedi sotto). Il bottone "🔄 Aggiorna dati" in sidebar è l'unica eccezione: chiama `etl.main.run()` **in-process** (non uno shell-out), incluso nell'immagine Streamlit apposta (vedi `streamlit/Dockerfile`).
 
 Chiamate API dirette da Streamlit per dati real-time potranno essere introdotte in futuro, solo dove necessario — non sono presenti in questa prima fase.
 
-**Stato**: l'ETL (`etl/app/`) è reale — usa `TakeoffClient` per estrarre le stesse due entità delle vecchie pipeline SQLite standalone (`activities`, `deadlines`) e le carica in PostgreSQL con upsert idempotenti. Streamlit (`streamlit/app/`) per ora ha solo la pagina di verifica infrastruttura: le pagine business (Manutenzioni, Scadenze dipendenti) e lo schema `raw_*`/business più ampio arrivano nelle fasi successive della migrazione (vedi il resto di questo README man mano che vengono aggiunte le sezioni).
+**Stato**: migrazione completa per le due entità esistenti. `etl/app/` estrae `activities` e `deadlines` da Takeoff CRM e le carica in PostgreSQL con upsert idempotenti. `streamlit/app/` ha tre pagine (`st.navigation`): Home (stato infrastruttura + storico `etl_runs`), Manutenzioni e Scadenze dipendenti (porting 1:1 delle vecchie dashboard SQLite). Nessuno schema di business oltre a queste due entità (clienti, commesse, tecnici, fatture, ...) — verrà aggiunto quando servirà, seguendo lo stesso pattern (`extract/` → tabella SQL → `load/` → pagina).
+
+Non c'è ancora autenticazione: `streamlit/app/utils/access.py` espone `require_access()`, chiamata da ogni pagina ma per ora un no-op — il punto in cui aggiungere `st.login()` in futuro senza toccare le pagine.
 
 ## Struttura delle cartelle
 
@@ -41,15 +43,24 @@ database/
     ├── 003_deadlines.sql      # tabelle subjects / deadlines_certificates
     └── 004_etl_runs.sql       # tabella etl_runs (log dei run ETL)
 streamlit/
-├── Dockerfile
+├── Dockerfile             # build context = repo root, include anche etl/app (vedi sotto)
 ├── requirements.txt
 └── app/
-    ├── main.py           # entry point, pagina di verifica infrastruttura
-    ├── pages/             # pagine business (vuota per ora)
-    ├── components/        # componenti UI riutilizzabili (vuota per ora)
+    ├── main.py            # entry point: st.set_page_config + st.navigation
+    ├── pages/
+    │   ├── home.py         # stato infrastruttura + ultimi etl_runs
+    │   ├── manutenzioni.py  # porting di maintenance_activities/app
+    │   └── scadenze.py      # porting di employee_deadlines_certificates/app
+    ├── components/         # solo le parti davvero uguali tra le due pagine business
+    │   ├── kpi.py            # riga di metriche, parametrizzata
+    │   ├── charts.py          # bar chart orizzontale, parametrizzata
+    │   └── sidebar.py          # bottone "Aggiorna dati" + "ultimo aggiornamento"
     ├── services/
-    │   └── database.py    # unico punto di accesso a PostgreSQL
-    └── utils/             # helper generici (vuota per ora)
+    │   ├── database.py     # unico punto di accesso a PostgreSQL (letture, dashboard_reader)
+    │   └── etl.py            # bridge a etl.main.run(), chiamato dal bottone "Aggiorna dati"
+    └── utils/
+        ├── status.py        # stato Manutenzioni/Scadenze (dipende da "oggi")
+        └── access.py          # require_access() — seam per l'autenticazione futura
 etl/
 ├── Dockerfile
 ├── requirements.txt
@@ -129,7 +140,13 @@ I dati di PostgreSQL sopravvivono a stop/riavvio/ricreazione dei container grazi
 
 ## Verificare Streamlit
 
-Apri [http://localhost:8501](http://localhost:8501). La pagina iniziale mostra: titolo, stato della connessione a PostgreSQL, numero di tabelle nello schema `public`, e host/database a cui è connessa. Se la connessione fallisce, mostra l'errore.
+Apri [http://localhost:8501](http://localhost:8501). Tre pagine in sidebar:
+
+- **Home**: stato della connessione a PostgreSQL, numero di tabelle nello schema `public`, storico degli ultimi run ETL (`etl_runs`).
+- **Manutenzioni**: KPI, % completamento per operaio, dettaglio mancanti, mappa — dati da `activities`.
+- **Scadenze dipendenti**: KPI, distribuzione per stato, dettaglio per persona — dati da `subjects`/`deadlines_certificates`.
+
+Entrambe le pagine business hanno, in sidebar, un pannello "🔄 Aggiorna dati da Takeoff CRM" con gli stessi input di prima (mese/tipi per Manutenzioni, ragione sociale/corrispondenza esatta per Scadenze) e la data dell'ultimo aggiornamento riuscito. Il bottone esegue l'ETL in-process (non uno shell-out): se un run per la stessa entity è già in corso, mostra "Aggiornamento già in corso" invece di lanciarne uno secondo.
 
 ## Verificare PostgreSQL
 
