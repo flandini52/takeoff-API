@@ -11,11 +11,15 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    # Bound to localhost only — not reachable from outside the host. On
-    # the server, connect via `docker compose exec postgres psql ...`; in
-    # dev, `localhost:${DB_PORT}` still works for an external client.
+    # Bound to localhost only — not reachable from outside the host. Host
+    # side uses DB_PORT (5435 by default, matching the native Windows
+    # production Postgres) so an external client (psql, pgAdmin, a native
+    # non-Docker run of this app) always connects the same way in dev and
+    # in production; container-to-container traffic inside the Docker
+    # network still uses Postgres' real internal port, 5432 — see the
+    # explicit DB_PORT override on the streamlit/etl services below.
     ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5435}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
@@ -36,7 +40,11 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      # Inside the Docker network: the Postgres service name, and its real
+      # internal port (not DB_PORT from .env, which is the host-side
+      # mapping above — see the ports: comment on postgres).
       DB_HOST: postgres
+      DB_PORT: "5432"
     ports:
       - "8501:8501"
     depends_on:
@@ -53,6 +61,7 @@ services:
     env_file: .env
     environment:
       DB_HOST: postgres
+      DB_PORT: "5432"
     volumes:
       - ./src:/app/src
     depends_on:

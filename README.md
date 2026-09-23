@@ -23,7 +23,9 @@ Utenti aziendali
 
 - **ETL**: unico componente che parla con l'API del gestionale. Estrae, trasforma e carica i dati in PostgreSQL. Eseguibile indipendentemente dalla dashboard (`docker compose run --rm etl`).
 - **PostgreSQL**: livello intermedio persistente tra gestionale e dashboard. Nessuno schema di business definitivo ancora — verrà aggiunto quando l'API del gestionale sarà documentata.
-- **Streamlit**: legge solo da PostgreSQL, tramite `streamlit/app/services/database.py` (connesso come `dashboard_reader`, sola lettura). Nessuna chiamata diretta al gestionale per pagina/utente (per ora — vedi sotto). Il bottone "🔄 Aggiorna dati" in sidebar è l'unica eccezione: chiama `etl.main.run()` **in-process** (non uno shell-out), incluso nell'immagine Streamlit apposta (vedi `streamlit/Dockerfile`).
+- **Streamlit**: legge solo da PostgreSQL, tramite `streamlit/app/services/database.py` (connesso come `dashboard_reader`, sola lettura). Nessuna chiamata diretta al gestionale per pagina/utente (per ora — vedi sotto). Il bottone "🔄 Aggiorna dati" in sidebar è l'unica eccezione: chiama `landini_etl.main.run()` **in-process** (non uno shell-out) — `landini_etl` è una dipendenza installata del progetto (vedi `pyproject.toml`), non un pacchetto solo-Docker.
+
+**Deploy**: produzione = Windows Server nativo, senza Docker (vedi [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md)). Docker/`docker-compose*.yml` restano per lo sviluppo locale e per una futura migrazione a un server Linux in cloud (vedi [Migrazione al cloud](#migrazione-al-cloud)) — stesso codice, stessa configurazione, stessi comandi in entrambi i casi.
 
 Chiamate API dirette da Streamlit per dati real-time sono introdotte solo dove necessario. Prima eccezione: il download dei certificati PDF nella pagina Scadenze dipendenti (`services/documents.py`) — l'URL del file su Takeoff (Azure Blob SAS) scade dopo ~24h, quindi non può essere estratto una volta dall'ETL e salvato in Postgres; va richiesto in tempo reale al momento del download (`GET /api/wiki/{elementId}`), poi il file viene scaricato e zippato al volo.
 
@@ -34,53 +36,51 @@ Non c'è ancora autenticazione: `streamlit/app/utils/access.py` espone `require_
 ## Struttura delle cartelle
 
 ```text
-docker-compose.yml          # postgres + streamlit (+ etl sotto profilo) — questo è il file da server
-docker-compose.override.yml # solo hot-reload di streamlit/app, solo sviluppo (mai sul server)
+pyproject.toml / uv.lock    # unica sorgente delle dipendenze (ETL + Streamlit), gestita con uv
+docker-compose.yml          # postgres + streamlit (+ etl sotto profilo) — sviluppo locale / cloud
+docker-compose.override.yml # solo hot-reload di streamlit/app, solo sviluppo (mai sul server, mai in cloud)
 .env / .env.example
+deploy/windows/             # script PowerShell per la produzione Windows Server — vedi DEPLOY_WINDOWS.md
 database/
-└── init/                    # script eseguiti da Postgres al primo avvio sul volume
+└── init/                    # script SQL: usati sia dall'init di Postgres in Docker sia da deploy/windows/init_db.ps1
     ├── 001_roles.sql          # ruoli etl_writer / dashboard_reader
     ├── 002_activities.sql     # tabella activities
     ├── 003_deadlines.sql      # tabelle subjects / deadlines_certificates
     └── 004_etl_runs.sql       # tabella etl_runs (log dei run ETL)
+src/landini_etl/            # pacchetto ETL installato dal pyproject — importabile ovunque (Docker, nativo)
+├── main.py                  # CLI (python -m landini_etl.main ...) + run(entity, **params) importabile
+├── config.py                 # unico modulo di config (DB + Takeoff CRM), usato anche da Streamlit
+├── api/
+│   └── client.py             # TakeoffClient — unico punto di contatto con il gestionale
+├── extract/
+│   ├── activities.py         # manutenzioni pianificate
+│   └── deadlines.py          # scadenze/certificati dipendenti (Wiki)
+├── transform/                # trasformazioni dati (vuota per ora)
+├── load/
+│   └── postgres.py           # upsert per tabella, lock per entity, log in etl_runs
+└── tools/                     # CLI di esplorazione (extract_data.py, extract_wiki.py)
 streamlit/
-├── Dockerfile             # build context = repo root, include anche etl/app (vedi sotto)
-├── requirements.txt
+├── Dockerfile              # build context = repo root; installa da pyproject/uv.lock (vedi sopra)
 └── app/
-    ├── main.py            # entry point: st.set_page_config + st.navigation
+    ├── main.py             # entry point: st.set_page_config + st.navigation
     ├── pages/
-    │   ├── home.py         # stato infrastruttura + ultimi etl_runs
-    │   ├── manutenzioni.py  # porting di maintenance_activities/app
-    │   └── scadenze.py      # porting di employee_deadlines_certificates/app
-    ├── components/         # solo le parti davvero uguali tra le due pagine business
-    │   ├── kpi.py            # riga di metriche, parametrizzata
-    │   ├── charts.py          # bar chart orizzontale, parametrizzata
-    │   └── sidebar.py          # bottone "Aggiorna dati" + "ultimo aggiornamento"
+    │   ├── home.py          # stato infrastruttura + ultimi etl_runs
+    │   ├── manutenzioni.py   # porting di maintenance_activities/app
+    │   └── scadenze.py       # porting di employee_deadlines_certificates/app (dietro ENABLE_SCADENZE)
+    ├── components/          # solo le parti davvero uguali tra le due pagine business
+    │   ├── kpi.py             # riga di metriche, parametrizzata
+    │   ├── charts.py           # bar chart orizzontale, parametrizzata
+    │   └── sidebar.py           # bottone "Aggiorna dati" + "ultimo aggiornamento"
     ├── services/
-    │   ├── database.py     # unico punto di accesso a PostgreSQL (letture, dashboard_reader)
-    │   ├── etl.py            # bridge a etl.main.run(), chiamato dal bottone "Aggiorna dati"
-    │   └── documents.py       # download PDF live da Takeoff CRM (unica eccezione "real-time")
+    │   ├── database.py      # unico punto di accesso a PostgreSQL (letture, dashboard_reader)
+    │   ├── etl.py             # bridge a landini_etl.main.run(), chiamato dal bottone "Aggiorna dati"
+    │   └── documents.py        # download PDF live da Takeoff CRM (unica eccezione "real-time")
     └── utils/
-        ├── status.py        # stato Manutenzioni/Scadenze (dipende da "oggi")
-        └── access.py          # require_access() — seam per l'autenticazione futura
+        ├── status.py         # stato Manutenzioni/Scadenze (dipende da "oggi")
+        └── access.py           # require_access() — seam per l'autenticazione futura
 etl/
-├── Dockerfile
-├── requirements.txt
-└── app/
-    ├── main.py           # CLI (python -m app.main ...) + run(entity, **params) importabile
-    ├── config.py          # credenziali Takeoff CRM (pydantic-settings)
-    ├── api/
-    │   └── client.py      # TakeoffClient — unico punto di contatto con il gestionale
-    ├── extract/
-    │   ├── activities.py  # manutenzioni pianificate
-    │   └── deadlines.py   # scadenze/certificati dipendenti (Wiki)
-    ├── transform/         # trasformazioni dati (vuota per ora)
-    ├── load/
-    │   └── postgres.py    # upsert per tabella, lock per entity, log in etl_runs
-    └── tools/              # CLI di esplorazione (extract_data.py, extract_wiki.py)
+└── Dockerfile               # build context = repo root; installa da pyproject/uv.lock (vedi sopra)
 ```
-
-Il repo contiene anche un toolkit di estrazione dati standalone precedente a questa architettura — vedi [Toolkit di estrazione dati (standalone)](#toolkit-di-estrazione-dati-standalone) più sotto.
 
 ## Prerequisiti
 
@@ -157,16 +157,16 @@ docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\dt"    # tabelle 
 docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\du"    # ruoli (landini, etl_writer, dashboard_reader)
 ```
 
-oppure, da un client esterno **sulla stessa macchina** (la porta è bindata su `127.0.0.1`, non raggiungibile da remoto), connettersi a `localhost:${DB_PORT}` (default `5432`) con le credenziali in `.env`.
+oppure, da un client esterno **sulla stessa macchina** (la porta è bindata su `127.0.0.1`, non raggiungibile da remoto), connettersi a `localhost:${DB_PORT}` (default `5435`, stesso numero della produzione Windows — vedi [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md)) con le credenziali in `.env`.
 
 ## Eseguire l'ETL
 
 L'ETL è sotto `profiles: ["etl"]`, quindi non parte con `docker compose up`; nominarlo esplicitamente lo esegue comunque:
 
 ```bash
-docker compose run --rm etl python -m app.main activities --month 2026-09
-docker compose run --rm etl python -m app.main deadlines "LANDINI SRL"
-docker compose run --rm etl python -m app.main all
+docker compose run --rm etl uv run python -m landini_etl.main activities --month 2026-09
+docker compose run --rm etl uv run python -m landini_etl.main deadlines "LANDINI SRL"
+docker compose run --rm etl uv run python -m landini_etl.main all
 ```
 
 Ogni run: estrae da Takeoff CRM (`api/client.py` + `extract/`), fa upsert idempotente in PostgreSQL (`load/postgres.py`, `INSERT ... ON CONFLICT DO UPDATE` sulle stesse chiavi usate in passato da `INSERT OR REPLACE`), e registra inizio/fine/righe caricate/eventuale errore in `etl_runs` (sostituisce il vecchio `_manifest.json`). Un lock Postgres per entity (`pg_try_advisory_lock`) evita run concorrenti sulla stessa entity: se una è già in corso, la seconda esce subito con un messaggio chiaro invece di lanciarsi in parallelo.
@@ -174,9 +174,30 @@ Ogni run: estrae da Takeoff CRM (`api/client.py` + `extract/`), fa upsert idempo
 Tool di esplorazione generici (non parte delle pipeline activities/deadlines):
 
 ```bash
-docker compose run --rm etl python -m app.tools.extract_data contacts --format csv
-docker compose run --rm etl python -m app.tools.extract_wiki "Landini Srl" --exact
+docker compose run --rm etl uv run python -m landini_etl.tools.extract_data contacts --format csv
+docker compose run --rm etl uv run python -m landini_etl.tools.extract_wiki "Landini Srl" --exact
 ```
+
+## Migrazione al cloud
+
+Lo stesso codice, la stessa immagine Docker e lo stesso `docker-compose.yml` usati per lo sviluppo locale sono pensati per diventare, senza modifiche, il deploy su un server Linux in cloud quando la V1 nativa Windows verrà dismessa. Passi previsti:
+
+1. Server Linux con Docker + Docker Compose installati.
+2. `git clone` del repo (pubblico, nessuna chiave necessaria).
+3. `.env` di produzione cloud (stesse variabili di `.env.example`, password diverse da quelle usate su Windows).
+4. Backup del Postgres nativo Windows e ripristino su quello del container:
+   ```bash
+   # sul server Windows (porta 5435)
+   & "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" -h localhost -p 5435 -U landini -Fc landini_dashboard > landini_dashboard.dump
+
+   # sul server Linux, dopo "docker compose up -d postgres"
+   docker compose cp landini_dashboard.dump postgres:/tmp/landini_dashboard.dump
+   docker compose exec postgres pg_restore -U landini -d landini_dashboard --clean --if-exists /tmp/landini_dashboard.dump
+   ```
+5. `docker compose up -d --build` (senza `docker-compose.override.yml`, che resta solo per lo sviluppo locale).
+6. Disattivazione delle attività pianificate di Windows (`deploy/windows/unregister_tasks.ps1`) e dismissione del server Windows solo dopo aver verificato il nuovo ambiente.
+
+Non c'è ancora una data per questa migrazione: per ora la produzione è la V1 nativa Windows Server, vedi [DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md).
 
 ---
 
