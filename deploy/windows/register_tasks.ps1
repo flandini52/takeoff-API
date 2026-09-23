@@ -9,7 +9,9 @@
       sola istanza. E' il supervisore a rilanciare Streamlit se termina;
       RestartOnFailure (ogni 1 minuto, 999 volte) copre solo il caso in
       cui non riesca a partire l'attivita' stessa.
-    - LandiniDashboard-Deploy: deploy.ps1, ogni 3 minuti e all'avvio.
+    - LandiniDashboard-Deploy: deploy.ps1, ogni giorno alle 06:30 e
+      all'avvio del server. Per un aggiornamento immediato:
+      Start-ScheduledTask -TaskName "LandiniDashboard-Deploy".
     - LandiniDashboard-ETL: etl_nightly.ps1, ogni notte alle 02:00.
     - LandiniDashboard-Backup: backup_db.ps1, ogni notte alle 02:30.
 
@@ -76,19 +78,20 @@ try {
     Register-ScheduledTask -TaskName "LandiniDashboard" -Action $action -Trigger $trigger `
         -Settings $settings -User $ServiceAccount -Password $password -RunLevel Limited -Force | Out-Null
 
-    # --- LandiniDashboard-Deploy: ogni 3 minuti ------------------------------
+    # --- LandiniDashboard-Deploy: ogni giorno alle 06:30 ---------------------
     Write-Host "Registro LandiniDashboard-Deploy..."
     $action = New-DashboardTaskAction "deploy.ps1"
-    # Ripetizione ogni 3 minuti per 10 anni. NON usare
-    # -RepetitionDuration ([TimeSpan]::MaxValue): su Windows Server 2016/2019
-    # con PowerShell 5.1 fallisce con "value incorrectly formatted or out of
-    # range". Un secondo trigger "All'avvio" fa ripartire il ciclo anche
-    # dopo un riavvio del server.
-    $repeatTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
-        -RepetitionInterval (New-TimeSpan -Minutes 3) -RepetitionDuration (New-TimeSpan -Days 3650)
+    # Una volta al giorno alle 06:30: dopo ETL (02:00) e backup (02:30),
+    # prima dell'inizio della giornata lavorativa, cosi' il riavvio di
+    # Streamlit non interrompe nessuno. Un secondo trigger "All'avvio"
+    # allinea il codice anche dopo un riavvio del server. Per un
+    # aggiornamento immediato si lancia l'attivita' a mano
+    # (Start-ScheduledTask), che fa lo stesso deploy con health check e
+    # rollback automatico.
+    $dailyTrigger = New-ScheduledTaskTrigger -Daily -At "06:30"
     $startupTrigger = New-ScheduledTaskTrigger -AtStartup
     $startupTrigger.Delay = "PT3M"
-    $trigger = @($repeatTrigger, $startupTrigger)
+    $trigger = @($dailyTrigger, $startupTrigger)
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew
     $settings.ExecutionTimeLimit = "PT15M"   # un deploy bloccato non resta appeso per sempre
     Register-ScheduledTask -TaskName "LandiniDashboard-Deploy" -Action $action -Trigger $trigger `

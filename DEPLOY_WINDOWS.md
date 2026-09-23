@@ -143,7 +143,7 @@ Chiede la password dell'account (non viene mai salvata da questo script — la u
 | Nome | Cosa fa | Trigger |
 |---|---|---|
 | `LandiniDashboard` | Supervisore di Streamlit (`start_dashboard.ps1`): lo avvia e lo rilancia dopo ~5 s se termina | All'avvio del server (ritardo 1 min); nessun limite di durata; una sola istanza. RestartOnFailure solo come rete di sicurezza se l'attività non riesce a partire |
-| `LandiniDashboard-Deploy` | Pull da `main` + riavvio se cambiato (`deploy.ps1`) | Ogni 3 minuti e all'avvio del server (ritardo 3 min); durata massima 15 min per esecuzione |
+| `LandiniDashboard-Deploy` | Pull da `main` + riavvio se cambiato (`deploy.ps1`) | Ogni giorno alle 06:30 e all'avvio del server (ritardo 3 min); durata massima 15 min per esecuzione |
 | `LandiniDashboard-ETL` | Estrazione dati da Takeoff CRM (`etl_nightly.ps1`) | Ogni notte alle 02:00 |
 | `LandiniDashboard-Backup` | Backup del database (`backup_db.ps1`) | Ogni notte alle 02:30 |
 
@@ -172,7 +172,22 @@ Get-Content (Get-ChildItem C:\landini-dashboard\logs\dashboard-*.log | Sort-Obje
 
 Apri `http://<hostname-server>:8501` da un altro PC sulla rete aziendale (dominio): dovresti vedere Home e Manutenzioni (Scadenze dipendenti resta nascosta finché `ENABLE_SCADENZE=false`).
 
-Prova anche un ciclo di deploy a vuoto (nessun nuovo commit): dopo al massimo 3 minuti, controlla `logs\deploy.log` — non deve esserci alcuna riga (il deploy esce silenziosamente quando non c'è nulla di nuovo).
+Prova anche un ciclo di deploy a vuoto (nessun nuovo commit), lanciandolo a mano:
+
+```powershell
+Start-ScheduledTask -TaskName "LandiniDashboard-Deploy"
+```
+
+Dopo qualche secondo controlla `logs\deploy.log`: non deve esserci alcuna riga nuova (il deploy esce silenziosamente quando non c'è nulla di nuovo).
+
+### Aggiornamento immediato
+
+Il deploy automatico gira una volta al giorno (06:30). Per portare subito in produzione un push su `main`, lancia a mano la stessa attività, invece di fare `git pull` a mano: fa lo stesso aggiornamento con health check e rollback automatico.
+
+```powershell
+Start-ScheduledTask -TaskName "LandiniDashboard-Deploy"
+Get-Content C:\landini-dashboard\logs\deploy.log -Tail 10
+```
 
 ## 10. Rollback manuale
 

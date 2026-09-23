@@ -214,7 +214,7 @@ Test rapidi, senza rete né database: import di tutti i moduli, parsing della co
 
 ## Produzione: Windows Server
 
-La V1 di produzione gira **nativa su Windows Server 2019** (domain controller aziendale), senza Docker: Streamlit tenuto attivo dall'Utilità di pianificazione di Windows, aggiornamenti tramite un deploy "pull" (attività pianificata ogni 3 minuti che aggiorna da `main` e riavvia, con rollback automatico se l'health check fallisce), ETL e backup del database come attività pianificate notturne. Nessun NSSM, nessun servizio Windows custom, nessun GitHub Actions self-hosted runner.
+La V1 di produzione gira **nativa su Windows Server 2019** (domain controller aziendale), senza Docker: Streamlit tenuto attivo dall'Utilità di pianificazione di Windows, aggiornamenti tramite un deploy "pull" (attività pianificata ogni giorno alle 06:30, o lanciata a mano per un aggiornamento immediato, che aggiorna da `main` e riavvia, con rollback automatico se l'health check fallisce), ETL e backup del database come attività pianificate notturne. Nessun NSSM, nessun servizio Windows custom, nessun GitHub Actions self-hosted runner.
 
 Guida completa passo-passo (prerequisiti, `.env`, inizializzazione del database, account di servizio, firewall, attività pianificate, verifica, rollback, disinstallazione, e cosa **non** toccare sul server): **[DEPLOY_WINDOWS.md](DEPLOY_WINDOWS.md)**.
 
@@ -223,7 +223,7 @@ Script in [`deploy/windows/`](deploy/windows/): `init_db.ps1`, `migrate.ps1`, `s
 ## Workflow dev → main
 
 - `dev`: sviluppo. Ogni modifica va qui prima.
-- `main`: produzione. `deploy.ps1` sul server segue solo `origin/main` — un push su `main` arriva in produzione entro ~3 minuti (con rollback automatico se l'health check fallisce dopo il deploy).
+- `main`: produzione. `deploy.ps1` sul server segue solo `origin/main` — un push su `main` arriva in produzione il giorno dopo alle 06:30, oppure subito lanciando a mano `Start-ScheduledTask -TaskName "LandiniDashboard-Deploy"` sul server (con rollback automatico se l'health check fallisce dopo il deploy).
 - Il merge `dev` → `main` è manuale (mai automatico): dopo aver provato le modifiche in sviluppo, chi decide di rilasciare fa il merge (via PR o `git merge`) e lo pusha su `main`.
 
 ## Migrazione al cloud

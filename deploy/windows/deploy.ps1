@@ -5,8 +5,9 @@
     versione precedente da solo se qualcosa va storto.
 
 .DESCRIPTION
-    Pensato per l'attivita' pianificata LandiniDashboard-Deploy (ogni 3
-    minuti). Usa un lock file per non avere due deploy in parallelo. Non
+    Pensato per l'attivita' pianificata LandiniDashboard-Deploy (ogni
+    giorno alle 06:30 e all'avvio del server, oppure lanciata a mano con
+    Start-ScheduledTask per un aggiornamento immediato). Usa un lock file per non avere due deploy in parallelo. Non
     tocca mai .env, logs/ o backups/: sono in .gitignore, quindi
     `git reset --hard` non li tocca (git non modifica mai i file
     ignorati).
@@ -105,7 +106,7 @@ try {
     $remoteHash = (git rev-parse origin/main).Trim()
 
     if ($currentHash -eq $remoteHash) {
-        # Nessun nuovo commit: gira ogni 3 minuti, non logghiamo rumore.
+        # Nessun nuovo commit: niente da fare, non logghiamo rumore.
         exit 0
     }
 
