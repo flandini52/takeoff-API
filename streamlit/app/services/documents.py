@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional, Set, Tuple
 
 import requests
 
-from etl.api.client import TakeoffClient
+from landini_etl.api.client import TakeoffClient
 
 DOCUMENT_PROPERTY_NAME = "documento"
 

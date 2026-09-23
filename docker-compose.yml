@@ -26,9 +26,9 @@ services:
       retries: 10
 
   streamlit:
-    # Root build context: this image embeds the etl package too, so the
-    # "Aggiorna dati" button can import and call it in-process (see
-    # streamlit/Dockerfile).
+    # Root build context: this image installs landini_etl too (unified
+    # pyproject.toml/uv.lock), so the "Aggiorna dati" button can import and
+    # call it in-process (see streamlit/Dockerfile).
     build:
       context: .
       dockerfile: streamlit/Dockerfile
@@ -44,21 +44,26 @@ services:
         condition: service_healthy
 
   etl:
-    build: ./etl
+    # Root build context: needs pyproject.toml/uv.lock/src/ from the repo
+    # root (see etl/Dockerfile), same as streamlit.
+    build:
+      context: .
+      dockerfile: etl/Dockerfile
     container_name: landini-etl
     env_file: .env
     environment:
       DB_HOST: postgres
     volumes:
-      - ./etl/app:/app/app
+      - ./src:/app/src
     depends_on:
       postgres:
         condition: service_healthy
     # Under a profile so a plain `docker compose up` (postgres + streamlit)
     # never launches it: run on demand with
-    # `docker compose run --rm etl python -m app.main ...` (that still
-    # works despite the profile — Compose always allows a service named
-    # explicitly on the command line), or `docker compose --profile etl up`.
+    # `docker compose run --rm etl uv run python -m landini_etl.main ...`
+    # (that still works despite the profile — Compose always allows a
+    # service named explicitly on the command line), or
+    # `docker compose --profile etl up`.
     profiles: ["etl"]
     restart: "no"
 

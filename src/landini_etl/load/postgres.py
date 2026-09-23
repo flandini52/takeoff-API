@@ -7,20 +7,22 @@ separate from api/ and extract/ so swapping/extending the destination
 never touches extraction.
 """
 
-import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2
 from psycopg2.extras import Json, execute_values
 
+from ..config import get_settings
+
 
 def connect():
+    settings = get_settings()
     return psycopg2.connect(
-        host=os.environ.get("DB_HOST", "localhost"),
-        port=int(os.environ.get("DB_PORT", "5432")),
-        dbname=os.environ.get("DB_NAME", ""),
+        host=settings.db_host,
+        port=settings.db_port,
+        dbname=settings.db_name,
         user="etl_writer",
-        password=os.environ.get("ETL_WRITER_PASSWORD", ""),
+        password=settings.etl_writer_password or "",
     )
 
 

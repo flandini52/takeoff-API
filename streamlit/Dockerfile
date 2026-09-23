@@ -1,22 +1,22 @@
-# Build context is the repo root (see docker-compose.yml), not streamlit/,
-# so this image can also embed the etl package: the "Aggiorna dati" button
-# imports etl.main.run() in-process instead of shelling out (see
-# streamlit/app/services/etl.py). etl/ keeps its own separate, minimal-context
-# image (etl/Dockerfile) for CLI/scheduled runs — this is the one additional
-# place it's also installed.
-FROM python:3.11-slim
+# Build context is the repo root (see docker-compose.yml): installs from
+# the same pyproject.toml/uv.lock as etl/Dockerfile and native Windows, so
+# landini_etl (needed in-process by the "Aggiorna dati" button, see
+# streamlit/app/services/etl.py) is on sys.path the same way everywhere —
+# no PYTHONPATH, no per-environment special case.
+FROM python:3.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-COPY streamlit/requirements.txt ./streamlit-requirements.txt
-COPY etl/requirements.txt ./etl-requirements.txt
-RUN pip install --no-cache-dir -r streamlit-requirements.txt -r etl-requirements.txt
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
+COPY streamlit/app/ ./streamlit/app/
 
-COPY streamlit/app/ ./app/
-COPY etl/app/ ./etl/
-
-ENV PYTHONPATH=/app
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Same invocation as native Windows (see DEPLOY_WINDOWS.md): only the
+# working directory (repo root) differs, never the command.
+CMD ["uv", "run", "streamlit", "run", "streamlit/app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]

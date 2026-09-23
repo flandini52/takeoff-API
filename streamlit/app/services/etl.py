@@ -1,16 +1,16 @@
-"""Bridge to the ETL package, imported in-process — the "Aggiorna dati"
-button never shells out to a subprocess.
+"""Bridge to the landini_etl package, imported in-process — the "Aggiorna
+dati" button never shells out to a subprocess.
 
-Requires the ETL package to be present in the image alongside this app/
-(see streamlit/Dockerfile: build context is the repo root so it can COPY
-etl/app/ in too, at /app/etl, with PYTHONPATH=/app making it importable
-as `etl`).
+landini_etl is a regular installed dependency of this project (see
+pyproject.toml / uv.lock) — `uv sync` puts it on sys.path the same way in
+Docker, native Windows dev, and native Windows production. No PYTHONPATH
+tricks, no environment-specific import path.
 """
 
 from typing import Any, Tuple
 
-from etl.main import RunSkipped
-from etl.main import run as etl_run
+from landini_etl.main import RunSkipped
+from landini_etl.main import run as etl_run
 
 
 def trigger_refresh(entity: str, **params: Any) -> Tuple[bool, str]:

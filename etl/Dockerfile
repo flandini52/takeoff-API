@@ -1,10 +1,16 @@
-FROM python:3.11-slim
+# Build context is the repo root (see docker-compose.yml): this image
+# needs pyproject.toml/uv.lock and src/landini_etl from the root, not just
+# etl/. Installs from the same lockfile Streamlit and native Windows use —
+# no separate requirements.txt, no PYTHONPATH tricks.
+FROM python:3.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
 
-COPY app/ ./app/
+RUN uv sync --frozen --no-dev
 
-CMD ["python", "-m", "app.main", "--help"]
+CMD ["uv", "run", "python", "-m", "landini_etl.main", "--help"]

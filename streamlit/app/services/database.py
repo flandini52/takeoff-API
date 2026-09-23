@@ -12,7 +12,6 @@ cleared explicitly by components/sidebar.py after a successful "Aggiorna
 dati" run so the dashboard doesn't wait out the TTL to show fresh data.
 """
 
-import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
@@ -21,14 +20,17 @@ import pandas as pd
 import psycopg2
 import streamlit as st
 
+from landini_etl.config import get_settings
+
 
 def _db_config() -> dict:
+    settings = get_settings()
     return {
-        "host": os.environ.get("DB_HOST", "localhost"),
-        "port": int(os.environ.get("DB_PORT", "5432")),
-        "dbname": os.environ.get("DB_NAME", ""),
+        "host": settings.db_host,
+        "port": settings.db_port,
+        "dbname": settings.db_name,
         "user": "dashboard_reader",
-        "password": os.environ.get("DASHBOARD_READER_PASSWORD", ""),
+        "password": settings.dashboard_reader_password or "",
     }
 
 
