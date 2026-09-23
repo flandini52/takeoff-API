@@ -94,3 +94,28 @@ function Get-PostgresBinPath {
     }
     return $path
 }
+
+function Invoke-NativeLogged {
+    # Esegue un programma esterno (git, uv, python...) con stdout e stderr
+    # aggiunti in fondo a $LogFile, e restituisce il suo exit code.
+    #
+    # Perche' passa da cmd.exe: in Windows PowerShell 5.1, se l'output di un
+    # programma esterno viene rediretto con *>> e $ErrorActionPreference e'
+    # "Stop", OGNI riga scritta su stderr diventa un errore che interrompe lo
+    # script - anche i normali messaggi informativi di git, uv o del logging
+    # di Python. Con la redirezione fatta da cmd.exe, PowerShell non vede
+    # stderr: nel log finisce l'output completo (compresi eventuali
+    # traceback) e l'esito si legge solo dall'exit code.
+    #
+    # PYTHONUTF8=1: output di Python in UTF-8 anche quando e' rediretto su
+    # file, cosi' un carattere accentato non causa errori di codifica.
+    param(
+        [Parameter(Mandatory)] [string]$CommandLine,
+        [Parameter(Mandatory)] [string]$LogFile
+    )
+    $env:PYTHONUTF8 = "1"
+    # | Out-Null: la funzione deve restituire SOLO l'exit code, anche se per
+    # qualche motivo arrivasse output sulla pipeline.
+    & cmd.exe /d /c "$CommandLine >> `"$LogFile`" 2>&1" | Out-Null
+    return [int]$LASTEXITCODE
+}

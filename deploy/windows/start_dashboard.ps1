@@ -65,15 +65,12 @@ while ($true) {
     $logFile = Get-DashboardLogFile
     Write-SupervisorLog "Avvio Streamlit..."
 
-    # Un errore di avvio (es. uv non trovato) non deve far terminare il
-    # supervisore: lo intercetto, lo scrivo nel log e riprovo.
+    # Output completo di uv/Streamlit (compresi eventuali traceback) nel log:
+    # vedi Invoke-NativeLogged in _lib.ps1. Un errore imprevisto non deve far
+    # terminare il supervisore: lo intercetto, lo scrivo nel log e riprovo.
     try {
-        & uv run streamlit run "streamlit\app\main.py" `
-            --server.address 0.0.0.0 `
-            --server.port 8501 `
-            --server.headless true `
-            *>> $logFile
-        $exitCode = $LASTEXITCODE
+        $exitCode = Invoke-NativeLogged -LogFile $logFile -CommandLine `
+            'uv run streamlit run streamlit\app\main.py --server.address 0.0.0.0 --server.port 8501 --server.headless true'
     }
     catch {
         $exitCode = -1

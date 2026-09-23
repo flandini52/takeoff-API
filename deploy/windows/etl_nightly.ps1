@@ -22,8 +22,8 @@ Set-Location $RepoRoot
 
 Add-Content -Path $LogFile -Value ("[{0}] Avvio ETL notturno (all)..." -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
 
-& uv run python -m landini_etl.main all *>> $LogFile
-$exitCode = $LASTEXITCODE
+# Output completo (log di Python compresi) nel file: vedi Invoke-NativeLogged.
+$exitCode = Invoke-NativeLogged -LogFile $LogFile -CommandLine "uv run python -m landini_etl.main all"
 
 if ($exitCode -eq 0) {
     Add-Content -Path $LogFile -Value ("[{0}] ETL completato con successo." -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))

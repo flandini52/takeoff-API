@@ -96,9 +96,12 @@ try {
     Set-Location $RepoRoot
 
     # 1. Fetch e confronto con origin/main.
-    git fetch origin main *>> $LogFile
-    if ($LASTEXITCODE -ne 0) {
-        Write-DeployLog "git fetch fallito (exit $LASTEXITCODE), esco senza modificare nulla."
+    # git/uv scrivono messaggi normali su stderr: vanno eseguiti con
+    # Invoke-NativeLogged (vedi _lib.ps1), mai con *>> sotto
+    # $ErrorActionPreference = "Stop".
+    $rc = Invoke-NativeLogged -LogFile $LogFile -CommandLine "git fetch origin main"
+    if ($rc -ne 0) {
+        Write-DeployLog "git fetch fallito (exit $rc), esco senza modificare nulla."
         exit 1
     }
 
@@ -117,17 +120,17 @@ try {
     Write-DeployLog "Nuova versione trovata: $currentHash -> $remoteHash. Avvio il deploy."
 
     # 2. Aggiorna il working tree e le dipendenze.
-    git reset --hard origin/main *>> $LogFile
-    if ($LASTEXITCODE -ne 0) {
-        Write-DeployLog "git reset --hard fallito (exit $LASTEXITCODE). Interrotto."
+    $rc = Invoke-NativeLogged -LogFile $LogFile -CommandLine "git reset --hard origin/main"
+    if ($rc -ne 0) {
+        Write-DeployLog "git reset --hard fallito (exit $rc). Interrotto."
         exit 1
     }
 
-    uv sync --frozen *>> $LogFile
-    if ($LASTEXITCODE -ne 0) {
-        Write-DeployLog "uv sync fallito (exit $LASTEXITCODE) sulla nuova versione. Torno a $currentHash."
-        git reset --hard $currentHash *>> $LogFile
-        uv sync --frozen *>> $LogFile
+    $rc = Invoke-NativeLogged -LogFile $LogFile -CommandLine "uv sync --frozen"
+    if ($rc -ne 0) {
+        Write-DeployLog "uv sync fallito (exit $rc) sulla nuova versione. Torno a $currentHash."
+        Invoke-NativeLogged -LogFile $LogFile -CommandLine "git reset --hard $currentHash" | Out-Null
+        Invoke-NativeLogged -LogFile $LogFile -CommandLine "uv sync --frozen" | Out-Null
         Write-DeployLog "Tornato a $currentHash dopo un uv sync fallito su $remoteHash."
         exit 1
     }
@@ -144,8 +147,8 @@ try {
 
     # 5. Rollback automatico.
     Write-DeployLog "Health check fallito dopo il deploy di $remoteHash. Torno a $currentHash."
-    git reset --hard $currentHash *>> $LogFile
-    uv sync --frozen *>> $LogFile
+    Invoke-NativeLogged -LogFile $LogFile -CommandLine "git reset --hard $currentHash" | Out-Null
+    Invoke-NativeLogged -LogFile $LogFile -CommandLine "uv sync --frozen" | Out-Null
     Restart-Dashboard
 
     if (Wait-DashboardHealthy) {
