@@ -12,12 +12,3 @@ __pycache__/
 data/
 logs/
 backups/
-
-# employee_deadlines_certificates pipeline: contains real personal data
-# (employee names, documents, expiry dates) — never commit it.
-employee_deadlines_certificates/data/
-employee_deadlines_certificates/db/
-
-# maintenance_activities pipeline: contains real client/site data.
-maintenance_activities/data/
-maintenance_activities/db/
