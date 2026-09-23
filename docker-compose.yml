@@ -11,8 +11,11 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    # Bound to localhost only — not reachable from outside the host. On
+    # the server, connect via `docker compose exec postgres psql ...`; in
+    # dev, `localhost:${DB_PORT}` still works for an external client.
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
@@ -36,8 +39,6 @@ services:
       DB_HOST: postgres
     ports:
       - "8501:8501"
-    volumes:
-      - ./streamlit/app:/app/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,8 +54,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # One-shot run, not a daemon: `docker compose run --rm etl` (or `up etl`)
-    # triggers it on demand, independently of the streamlit/postgres services.
+    # Under a profile so a plain `docker compose up` (postgres + streamlit)
+    # never launches it: run on demand with
+    # `docker compose run --rm etl python -m app.main ...` (that still
+    # works despite the profile — Compose always allows a service named
+    # explicitly on the command line), or `docker compose --profile etl up`.
+    profiles: ["etl"]
     restart: "no"
 
 volumes:

@@ -1,0 +1,9 @@
+# Development-only overrides. `docker compose` merges this automatically
+# when it sits next to docker-compose.yml (no extra flag needed) — so a
+# plain `docker compose up` in this repo gets hot-reload locally. The
+# server deploys docker-compose.yml alone (this file is dev-only; don't
+# copy it there), which must keep working without it.
+services:
+  streamlit:
+    volumes:
+      - ./streamlit/app:/app/app

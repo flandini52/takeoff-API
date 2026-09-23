@@ -34,7 +34,8 @@ Non c'è ancora autenticazione: `streamlit/app/utils/access.py` espone `require_
 ## Struttura delle cartelle
 
 ```text
-docker-compose.yml       # postgres + streamlit + etl
+docker-compose.yml          # postgres + streamlit (+ etl sotto profilo) — questo è il file da server
+docker-compose.override.yml # solo hot-reload di streamlit/app, solo sviluppo (mai sul server)
 .env / .env.example
 database/
 └── init/                    # script eseguiti da Postgres al primo avvio sul volume
@@ -130,13 +131,13 @@ docker compose up -d --build
 docker compose up -d --build
 ```
 
-Avvia `postgres`, `streamlit` (con hot-reload: `streamlit/app/` è montato come volume) ed esegue anche `etl` una volta come parte dello startup. Per fermare tutto:
+Avvia solo `postgres` e `streamlit`. L'ETL **non** parte automaticamente (è sotto `profiles: ["etl"]` in `docker-compose.yml`, vedi [Eseguire l'ETL](#eseguire-letl)) — resta lanciabile a mano indipendentemente dagli altri due servizi. In sviluppo, `docker-compose.override.yml` viene unito automaticamente e monta `streamlit/app/` come volume (hot-reload senza rebuild); sul server si deploya solo `docker-compose.yml` (senza l'override), quindi l'immagine gira col codice così com'è stato buildato. Per fermare tutto:
 
 ```bash
 docker compose down
 ```
 
-I dati di PostgreSQL sopravvivono a stop/riavvio/ricreazione dei container grazie al volume persistente `postgres_data` (si perdono solo con `docker compose down -v`).
+I dati di PostgreSQL sopravvivono a stop/riavvio/ricreazione dei container grazie al volume persistente `postgres_data` (si perdono solo con `docker compose down -v`). Postgres non è esposto all'esterno: la porta è bindata su `127.0.0.1` (vedi [Verificare PostgreSQL](#verificare-postgresql)); solo Streamlit (8501) è raggiungibile da fuori l'host.
 
 ## Verificare Streamlit
 
@@ -155,9 +156,11 @@ docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\dt"    # tabelle 
 docker compose exec postgres psql -U $DB_USER -d $DB_NAME -c "\du"    # ruoli (landini, etl_writer, dashboard_reader)
 ```
 
-oppure, da un client esterno, connettersi a `localhost:${DB_PORT}` (default `5432`) con le credenziali in `.env`.
+oppure, da un client esterno **sulla stessa macchina** (la porta è bindata su `127.0.0.1`, non raggiungibile da remoto), connettersi a `localhost:${DB_PORT}` (default `5432`) con le credenziali in `.env`.
 
 ## Eseguire l'ETL
+
+L'ETL è sotto `profiles: ["etl"]`, quindi non parte con `docker compose up`; nominarlo esplicitamente lo esegue comunque:
 
 ```bash
 docker compose run --rm etl python -m app.main activities --month 2026-09
