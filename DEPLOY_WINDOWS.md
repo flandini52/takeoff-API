@@ -101,7 +101,7 @@ uv sync --frozen
 .\deploy\windows\firewall.ps1
 ```
 
-Apre la porta TCP 8501 in ingresso, **solo per il profilo Dominio** (non raggiungibile da fuori la rete aziendale). Idempotente.
+Apre la porta TCP 8501 in ingresso, **solo per il profilo Dominio** e **solo dalla sottorete locale** (`LocalSubnet`): anche se per errore il router inoltrasse la porta, da Internet resterebbe bloccata. Idempotente.
 
 ## 6. Account di servizio
 
