@@ -61,7 +61,10 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Connessione a Postgres fallita (host=$dbHost porta=$dbPort utente=postgres). Controlla la password e che il servizio postgresql-x64-16 sia avviato."
     }
-    if ($dbExists.Trim() -eq "1") {
+    # Se il database non esiste la query non restituisce righe e psql non
+    # stampa nulla: $dbExists e' $null. "$dbExists" lo converte in stringa
+    # vuota, cosi' .Trim() non fallisce.
+    if ("$dbExists".Trim() -eq "1") {
         Write-Host "Database '$dbName' gia' esistente, non lo ricreo." -ForegroundColor Yellow
     } else {
         Write-Host "Creo il database '$dbName'..."

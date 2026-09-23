@@ -102,8 +102,12 @@ try {
         exit 1
     }
 
-    $currentHash = (git rev-parse HEAD).Trim()
-    $remoteHash = (git rev-parse origin/main).Trim()
+    $currentHash = "$(git rev-parse HEAD)".Trim()
+    $remoteHash = "$(git rev-parse origin/main)".Trim()
+    if (-not $currentHash -or -not $remoteHash) {
+        Write-DeployLog "git rev-parse non ha restituito un hash valido, esco senza modificare nulla."
+        exit 1
+    }
 
     if ($currentHash -eq $remoteHash) {
         # Nessun nuovo commit: niente da fare, non logghiamo rumore.
