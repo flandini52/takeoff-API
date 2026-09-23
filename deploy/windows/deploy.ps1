@@ -11,13 +11,14 @@
     `git reset --hard` non li tocca (git non modifica mai i file
     ignorati).
 
-    Il riavvio di Streamlit NON usa Stop/Start-ScheduledTask su un'altra
-    attivita' pianificata (richiederebbe permessi che un account di
-    servizio non amministratore normalmente non ha): termina invece il
-    processo Streamlit in esecuzione. L'attivita' pianificata
-    LandiniDashboard lo rileva come "terminato" e lo riavvia da sola
-    (RestartOnFailure, configurato da register_tasks.ps1) — a questo
-    account basta poter terminare un proprio processo, sempre permesso.
+    Il riavvio di Streamlit NON usa Stop/Start-ScheduledTask (richiederebbe
+    permessi che un account di servizio non amministratore normalmente non
+    ha): termina SOLO il processo Streamlit. Il supervisore
+    start_dashboard.ps1, che gira dentro l'attivita' LandiniDashboard, se
+    ne accorge e lo rilancia dopo ~5 secondi con il codice aggiornato. A
+    questo account basta poter terminare un proprio processo, sempre
+    permesso. L'ETL (notturno o dal bottone) e il supervisore stesso non
+    vengono mai terminati.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -37,17 +38,34 @@ function Write-DeployLog {
 }
 
 function Restart-Dashboard {
-    Get-CimInstance Win32_Process -Filter "Name = 'python.exe' or Name = 'streamlit.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match [regex]::Escape($RepoRoot) } |
+    # Termina SOLO i processi di Streamlit di questo repo. Un processo e'
+    # considerato "Streamlit della dashboard" se:
+    #   - appartiene al repo (eseguibile dentro il repo, es. .venv\Scripts,
+    #     oppure percorso del repo nella command line), e
+    #   - la command line contiene sia "streamlit" sia "run".
+    # Restano quindi esclusi l'ETL notturno (uv run python -m landini_etl...)
+    # e il supervisore start_dashboard.ps1 (powershell.exe non e' tra i nomi
+    # cercati). Un aggiornamento lanciato dal bottone "Aggiorna dati" gira
+    # dentro Streamlit e viene interrotto insieme a lui: la transazione su
+    # Postgres viene annullata e il lock rilasciato, basta rilanciarlo.
+    $repoPattern = [regex]::Escape($RepoRoot)
+    Get-CimInstance Win32_Process -Filter "Name = 'python.exe' or Name = 'pythonw.exe' or Name = 'streamlit.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $cmd = $_.CommandLine
+            $exe = $_.ExecutablePath
+            $inRepo = ($cmd -and $cmd -match $repoPattern) -or ($exe -and $exe -like "$RepoRoot*")
+            $isStreamlit = $cmd -and ($cmd -match '(?i)streamlit') -and ($cmd -match '(?i)\brun\b')
+            $inRepo -and $isStreamlit
+        } |
         ForEach-Object {
             try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {}
         }
 }
 
 function Wait-DashboardHealthy {
-    # RestartInterval dell'attivita' LandiniDashboard e' 1 minuto (vedi
-    # register_tasks.ps1): il riavvio puo' impiegare fino a quel tempo
-    # piu' il boot di Streamlit, quindi il retry copre ~90 secondi.
+    # Il supervisore rilancia Streamlit dopo ~5 secondi; il boot di
+    # Streamlit richiede qualche secondo in piu'. Il retry copre ~90
+    # secondi, ampiamente sufficienti.
     for ($i = 0; $i -lt 18; $i++) {
         Start-Sleep -Seconds 5
         try {
