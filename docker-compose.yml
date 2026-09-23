@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: landini-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  streamlit:
+    build: ./streamlit
+    container_name: landini-streamlit
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./streamlit/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  etl:
+    build: ./etl
+    container_name: landini-etl
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+    volumes:
+      - ./etl/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # One-shot run, not a daemon: `docker compose run --rm etl` (or `up etl`)
+    # triggers it on demand, independently of the streamlit/postgres services.
+    restart: "no"
+
+volumes:
+  postgres_data:

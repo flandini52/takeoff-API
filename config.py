@@ -1,8 +1,14 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolved relative to this file (not the current working directory), so
+# scripts in subdirectories (e.g. employee_deadlines_certificates/) find the
+# same .env regardless of where they're invoked from.
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -16,7 +22,7 @@ class Settings(BaseSettings):
     # (in addition to real environment variables, which always take
     # priority). extra="ignore" means unrelated variables in .env/the
     # environment are silently ignored instead of raising an error.
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     # Each field is auto-populated from the matching env var name
     # (case-insensitive): takeoff_base_url <- TAKEOFF_BASE_URL, etc.
